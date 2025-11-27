@@ -1,7 +1,8 @@
 streamlit
 requests
 edge-tts
-moviepy
+moviepy==1.0.3
 pillow
-numpy
+numpy<2.0.0
 imageio-ffmpeg
+imageio==2.4.1
