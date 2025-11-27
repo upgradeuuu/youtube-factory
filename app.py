@@ -4,12 +4,19 @@ import edge_tts
 import asyncio
 import os
 import random
-from gtts import gTTS  # <--- NEW FALLBACK ENGINE
+from gtts import gTTS
 # FIXED IMPORTS for MoviePy 1.0.3 compatibility
 from moviepy.editor import VideoFileClip, AudioFileClip, TextClip, CompositeVideoClip, ColorClip
 from moviepy.video.fx.all import crop, resize, colorx, lum_contrast
+# NEW: Import Config to fix ImageMagick error
+from moviepy.config import change_settings
 from PIL import Image, ImageDraw, ImageFont
 from textwrap import wrap
+
+# --- 🔧 FIX IMAGEMAGICK ERROR ---
+# This tells the server exactly where the tool is
+if os.name == 'posix':
+    change_settings({"IMAGEMAGICK_BINARY": "/usr/bin/convert"})
 
 # --- 🎨 CONFIGURATION ---
 st.set_page_config(page_title="Cloud Video Factory", page_icon="☁️", layout="wide")
@@ -22,13 +29,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 🔑 API KEYS ---
-# DIRECTLY INTEGRATED KEY
 PEXELS_API_KEY = "jQoGddZsH0YvgELlxhdfJfolBlxL1FBwh3AKM7pyR62S1XLWWhNX4AyP"
 
 # --- 🧠 AI FUNCTIONS ---
 
 def get_script(topic, mode):
-    """Get Script from Pollinations.ai (Free)"""
     if mode == "Short (Vertical)":
         prompt = f"Write a fast-paced 40-second script about '{topic}'. No intro, straight into facts. Hook the audience immediately."
     else:
@@ -44,9 +49,7 @@ def get_script(topic, mode):
         return f"{topic} is a fascinating subject. There is so much to learn about it. Let's dive in."
 
 def get_thumbnail(topic, mode, vibe, filename):
-    """Generate Psychological Thumbnail (Pollinations Image)"""
     width, height = (720, 1280) if mode == "Short (Vertical)" else (1280, 720)
-    
     colors = {
         "Urgent/Scary 🔴": "high contrast red and black horror aesthetic glowing eyes",
         "Happy/Exciting 🟡": "bright yellow orange summer vibes euphoric high saturation",
@@ -54,19 +57,15 @@ def get_thumbnail(topic, mode, vibe, filename):
         "Professional/Trust 🔵": "clean white and blue corporate minimal high tech"
     }
     color_prompt = colors.get(vibe, "cinematic lighting")
-    
     prompt = f"youtube thumbnail for {topic}, {color_prompt}, 8k resolution, highly detailed, expressive face"
     url = f"https://image.pollinations.ai/prompt/{prompt}?width={width}&height={height}&model=flux&nologo=true"
-    
     with open(filename, 'wb') as f:
         f.write(requests.get(url).content)
 
 def add_text_on_image(image_path, text, vibe):
-    """Add Big Bold Text to Thumbnail"""
     try:
         img = Image.open(image_path)
         draw = ImageDraw.Draw(img)
-        
         fontsize = int(img.width * 0.12)
         try:
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", fontsize)
@@ -75,23 +74,19 @@ def add_text_on_image(image_path, text, vibe):
 
         lines = wrap(text.upper(), width=12)
         wrapped_text = "\n".join(lines)
-        
         fill_color = "yellow" if "Happy" in vibe else "white"
         if "Scary" in vibe: fill_color = "red"
         
         w, h = img.size
         x, y = w / 2, h / 2
-        
         stroke_width = 8
         draw.multiline_text((x, y), wrapped_text, font=font, fill=fill_color, 
                             stroke_width=stroke_width, stroke_fill="black", anchor="mm", align="center")
-        
         img.save(image_path)
     except Exception as e:
         print(f"Text Error: {e}")
 
 def get_video_clip(query, api_key, mode, filename):
-    """Download Video from Pexels"""
     orientation = "portrait" if mode == "Short (Vertical)" else "landscape"
     headers = {'Authorization': api_key}
     url = f"https://api.pexels.com/videos/search?query={query}&orientation={orientation}&per_page=1"
@@ -106,45 +101,36 @@ def get_video_clip(query, api_key, mode, filename):
         pass
     return False
 
-# --- 🔥 ROBUST AUDIO ENGINE ---
 async def get_voice(text, filename):
-    # 1. Clean Text
     if not text or len(text) < 5:
-        text = "I am sorry, but I could not generate a script for this topic. Please try again."
+        text = "I am sorry, but I could not generate a script for this topic."
     
-    # 2. Try Microsoft Edge (High Quality)
+    # Try Edge-TTS
     try:
-        print("🎙️ Trying Edge-TTS...")
         communicate = edge_tts.Communicate(text, "en-US-AriaNeural")
         await communicate.save(filename)
-        # Verify file creation
         if os.path.exists(filename) and os.path.getsize(filename) > 0:
             return True
-    except Exception as e:
-        print(f"⚠️ Edge-TTS Failed: {e}")
+    except:
+        pass
 
-    # 3. Fallback: Google TTS (Reliable)
+    # Fallback Google TTS
     try:
-        print("🔄 Switching to Google TTS Fallback...")
         tts = gTTS(text=text, lang='en')
         tts.save(filename)
         return True
-    except Exception as e:
-        print(f"❌ Both TTS Engines Failed: {e}")
+    except:
         return False
 
 def edit_video(video_path, audio_path, script, output_path, mode, vibe):
-    """Assemble Video with Overlay & Subtitles"""
     video = VideoFileClip(video_path)
     audio = AudioFileClip(audio_path)
     
-    # 1. Loop Video
     if video.duration < audio.duration:
         video = video.loop(duration=audio.duration)
     else:
         video = video.subclip(0, audio.duration)
     
-    # 2. Resize & Crop (Fill Screen)
     target_w, target_h = (1080, 1920) if mode == "Short (Vertical)" else (1920, 1080)
     
     if video.w / video.h > target_w / target_h:
@@ -154,16 +140,15 @@ def edit_video(video_path, audio_path, script, output_path, mode, vibe):
         video = video.resize(width=target_w)
         video = video.crop(y1=video.h/2 - target_h/2, height=target_h)
         
-    # 3. Cinematic Overlay
     video = video.fx(colorx, 0.8)
     if "Scary" in vibe:
         video = video.fx(lum_contrast, contrast=0.2)
         
     video = video.set_audio(audio)
     
-    # 4. Subtitles
-    fontsize = 80 if mode == "Short (Vertical)" else 60
-    txt = TextClip(script, fontsize=fontsize, color='white', font='DejaVu-Sans-Bold',
+    # CHANGED FONT TO 'Arial' which is safer, or 'LiberationSans-Bold' on Linux
+    # Using a generic approach that MoviePy usually handles
+    txt = TextClip(script, fontsize=70, color='white', font='Arial',
                    stroke_color='black', stroke_width=3, method='caption',
                    size=(target_w * 0.9, None), align='center')
     txt = txt.set_pos('center').set_duration(video.duration)
@@ -171,52 +156,38 @@ def edit_video(video_path, audio_path, script, output_path, mode, vibe):
     final = CompositeVideoClip([video, txt])
     final.write_videofile(output_path, fps=24)
 
-# --- 🖥️ DASHBOARD UI ---
+# --- 🖥️ UI ---
 st.title("🏭 Cloud Video Factory")
-st.write("Generating Content Online - No Laptop Storage Used.")
-
 with st.sidebar:
     st.header("🔑 Access")
     st.success("API Key Integrated!")
-    
     st.divider()
     mode = st.radio("Format", ["Short (Vertical)", "Long (Horizontal)"])
-    vibe = st.selectbox("Psychology Vibe", 
-        ["Urgent/Scary 🔴", "Happy/Exciting 🟡", "Mysterious/Deep 🟣", "Professional/Trust 🔵"])
+    vibe = st.selectbox("Psychology Vibe", ["Urgent/Scary 🔴", "Happy/Exciting 🟡"])
 
 topic = st.text_input("Enter Video Topic", "Psychology of Money")
 
 if st.button("🚀 START FACTORY"):
-    with st.status("🏗️ Processing in Cloud...", expanded=True):
-        st.write("📝 Writing Script (Pollinations AI)...")
+    with st.status("🏗️ Processing...", expanded=True):
+        st.write("📝 Scripting...")
         script = get_script(topic, mode)
         
-        st.write("🎙️ Recording Voice (Edge-TTS -> Google Fallback)...")
-        # Run Audio Engine
-        audio_success = asyncio.run(get_voice(script, "audio.mp3"))
-        
-        if audio_success:
-            st.write("🎥 Searching Pexels Video...")
+        st.write("🎙️ Voicing...")
+        if asyncio.run(get_voice(script, "audio.mp3")):
+            st.write("🎥 Fetching Video...")
             if not get_video_clip(topic, PEXELS_API_KEY, mode, "bg.mp4"):
-                st.warning("Video not found. Using Black Background.")
-                ColorClip(size=(1080,1920), color=(0,0,0), duration=5).write_videofile("bg.mp4", fps=24)
+                 ColorClip(size=(1080,1920), color=(0,0,0), duration=5).write_videofile("bg.mp4", fps=24)
             
-            st.write(f"🎨 Creating '{vibe}' Thumbnail...")
+            st.write("🎨 Thumbnailing...")
             get_thumbnail(topic, mode, vibe, "thumb.jpg")
             add_text_on_image("thumb.jpg", topic, vibe)
             
-            st.write("🎬 Editing Final Cut...")
+            st.write("🎬 Editing...")
             edit_video("bg.mp4", "audio.mp3", script, "final.mp4", mode, vibe)
-            st.success("Production Complete!")
+            st.success("Done!")
             
             c1, c2 = st.columns(2)
-            with c1:
-                st.image("thumb.jpg", caption="Thumbnail")
-                with open("thumb.jpg", "rb") as f:
-                    st.download_button("⬇️ Download Thumb", f, "thumb.jpg")
-            with c2:
-                st.video("final.mp4")
-                with open("final.mp4", "rb") as f:
-                    st.download_button("⬇️ Download Video", f, "video.mp4")
+            with c1: st.image("thumb.jpg"); st.download_button("Download Thumb", open("thumb.jpg", "rb"), "thumb.jpg")
+            with c2: st.video("final.mp4"); st.download_button("Download Video", open("final.mp4", "rb"), "video.mp4")
         else:
-            st.error("Audio generation failed completely. Please wait 1 minute and try again.")
+            st.error("Audio failed.")
