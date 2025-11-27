@@ -35,9 +35,14 @@ def get_script(topic, mode):
     
     try:
         # Use Pollinations Text API
-        return requests.get(f"https://text.pollinations.ai/{prompt}").text
+        response = requests.get(f"https://text.pollinations.ai/{prompt}")
+        if response.status_code == 200 and len(response.text) > 10:
+            return response.text
+        else:
+            # Fallback if AI fails
+            return f"{topic} is a fascinating subject. There is so much to learn about it. Let's dive in."
     except:
-        return f"Error: Could not generate script for {topic}."
+        return f"{topic} is a fascinating subject. There is so much to learn about it. Let's dive in."
 
 def get_thumbnail(topic, mode, vibe, filename):
     """Generate Psychological Thumbnail (Pollinations Image)"""
@@ -112,8 +117,16 @@ def get_video_clip(query, api_key, mode, filename):
     return False
 
 async def get_voice(text, filename):
-    communicate = edge_tts.Communicate(text, "en-US-ChristopherNeural")
-    await communicate.save(filename)
+    # Safety Check: If text is empty, fill it so app doesn't crash
+    if not text or len(text) < 5:
+        text = "I am sorry, but I could not generate a script for this topic. Please try again."
+    
+    # Switched to 'Aria' (Female) - More stable than Christopher
+    try:
+        communicate = edge_tts.Communicate(text, "en-US-AriaNeural")
+        await communicate.save(filename)
+    except Exception as e:
+        print(f"TTS Error: {e}")
 
 def edit_video(video_path, audio_path, script, output_path, mode, vibe):
     """Assemble Video with Overlay & Subtitles"""
@@ -176,6 +189,7 @@ if st.button("🚀 START FACTORY"):
         script = get_script(topic, mode)
         
         st.write("🎙️ Recording Voice (Edge-TTS)...")
+        # Ensure we wait for audio
         asyncio.run(get_voice(script, "audio.mp3"))
         
         st.write("🎥 Searching Pexels Video...")
@@ -188,16 +202,18 @@ if st.button("🚀 START FACTORY"):
         add_text_on_image("thumb.jpg", topic, vibe)
         
         st.write("🎬 Editing Final Cut...")
-        edit_video("bg.mp4", "audio.mp3", script, "final.mp4", mode, vibe)
-        
-    st.success("Production Complete!")
-    
-    c1, c2 = st.columns(2)
-    with c1:
-        st.image("thumb.jpg", caption="Thumbnail")
-        with open("thumb.jpg", "rb") as f:
-            st.download_button("⬇️ Download Thumb", f, "thumb.jpg")
-    with c2:
-        st.video("final.mp4")
-        with open("final.mp4", "rb") as f:
-            st.download_button("⬇️ Download Video", f, "video.mp4")
+        if os.path.exists("audio.mp3") and os.path.getsize("audio.mp3") > 0:
+            edit_video("bg.mp4", "audio.mp3", script, "final.mp4", mode, vibe)
+            st.success("Production Complete!")
+            
+            c1, c2 = st.columns(2)
+            with c1:
+                st.image("thumb.jpg", caption="Thumbnail")
+                with open("thumb.jpg", "rb") as f:
+                    st.download_button("⬇️ Download Thumb", f, "thumb.jpg")
+            with c2:
+                st.video("final.mp4")
+                with open("final.mp4", "rb") as f:
+                    st.download_button("⬇️ Download Video", f, "video.mp4")
+        else:
+            st.error("Audio generation failed. Please try a different topic.")
