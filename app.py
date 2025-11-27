@@ -4,6 +4,7 @@ import edge_tts
 import asyncio
 import os
 import random
+# FIXED IMPORTS for MoviePy 1.0.3 compatibility
 from moviepy.editor import VideoFileClip, AudioFileClip, TextClip, CompositeVideoClip, ColorClip
 from moviepy.video.fx.all import crop, resize, colorx, lum_contrast
 from PIL import Image, ImageDraw, ImageFont
@@ -18,6 +19,10 @@ st.markdown("""
     .stTextInput>div>div>input { background-color: #262730; color: white; }
 </style>
 """, unsafe_allow_html=True)
+
+# --- 🔑 API KEYS ---
+# DIRECTLY INTEGRATED KEY
+PEXELS_API_KEY = "jQoGddZsH0YvgELlxhdfJfolBlxL1FBwh3AKM7pyR62S1XLWWhNX4AyP"
 
 # --- 🧠 AI FUNCTIONS ---
 
@@ -64,6 +69,7 @@ def add_text_on_image(image_path, text, vibe):
         # Dynamic Font Size
         fontsize = int(img.width * 0.12)
         try:
+            # Linux path for fonts usually available on Streamlit Cloud
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", fontsize)
         except:
             font = ImageFont.load_default()
@@ -77,7 +83,6 @@ def add_text_on_image(image_path, text, vibe):
         if "Scary" in vibe: fill_color = "red"
         
         # Center Position
-        # (Simple centering math for fallback fonts)
         w, h = img.size
         x, y = w / 2, h / 2
         
@@ -141,6 +146,7 @@ def edit_video(video_path, audio_path, script, output_path, mode, vibe):
     
     # 4. Subtitles
     fontsize = 80 if mode == "Short (Vertical)" else 60
+    # Using 'caption' method for automatic wrapping
     txt = TextClip(script, fontsize=fontsize, color='white', font='DejaVu-Sans-Bold',
                    stroke_color='black', stroke_width=3, method='caption',
                    size=(target_w * 0.9, None), align='center')
@@ -155,12 +161,7 @@ st.write("Generating Content Online - No Laptop Storage Used.")
 
 with st.sidebar:
     st.header("🔑 Access")
-    # Secret Key Loader
-    if "PEXELS_KEY" in st.secrets:
-        api_key = st.secrets["PEXELS_KEY"]
-        st.success("API Key Connected!")
-    else:
-        api_key = st.text_input("Paste Pexels API Key", type="password")
+    st.success("API Key Integrated!")
     
     st.divider()
     mode = st.radio("Format", ["Short (Vertical)", "Long (Horizontal)"])
@@ -170,36 +171,33 @@ with st.sidebar:
 topic = st.text_input("Enter Video Topic", "Psychology of Money")
 
 if st.button("🚀 START FACTORY"):
-    if not api_key:
-        st.error("Please enter Pexels Key in sidebar!")
-    else:
-        with st.status("🏗️ Processing in Cloud...", expanded=True):
-            st.write("📝 Writing Script (Pollinations AI)...")
-            script = get_script(topic, mode)
-            
-            st.write("🎙️ Recording Voice (Edge-TTS)...")
-            asyncio.run(get_voice(script, "audio.mp3"))
-            
-            st.write("🎥 Searching Pexels Video...")
-            if not get_video_clip(topic, api_key, mode, "bg.mp4"):
-                st.warning("Video not found. Using Black Background.")
-                ColorClip(size=(1080,1920), color=(0,0,0), duration=5).write_videofile("bg.mp4", fps=24)
-            
-            st.write(f"🎨 Creating '{vibe}' Thumbnail...")
-            get_thumbnail(topic, mode, vibe, "thumb.jpg")
-            add_text_on_image("thumb.jpg", topic, vibe)
-            
-            st.write("🎬 Editing Final Cut...")
-            edit_video("bg.mp4", "audio.mp3", script, "final.mp4", mode, vibe)
-            
-        st.success("Production Complete!")
+    with st.status("🏗️ Processing in Cloud...", expanded=True):
+        st.write("📝 Writing Script (Pollinations AI)...")
+        script = get_script(topic, mode)
         
-        c1, c2 = st.columns(2)
-        with c1:
-            st.image("thumb.jpg", caption="Thumbnail")
-            with open("thumb.jpg", "rb") as f:
-                st.download_button("⬇️ Download Thumb", f, "thumb.jpg")
-        with c2:
-            st.video("final.mp4")
-            with open("final.mp4", "rb") as f:
-                st.download_button("⬇️ Download Video", f, "video.mp4")
+        st.write("🎙️ Recording Voice (Edge-TTS)...")
+        asyncio.run(get_voice(script, "audio.mp3"))
+        
+        st.write("🎥 Searching Pexels Video...")
+        if not get_video_clip(topic, PEXELS_API_KEY, mode, "bg.mp4"):
+            st.warning("Video not found. Using Black Background.")
+            ColorClip(size=(1080,1920), color=(0,0,0), duration=5).write_videofile("bg.mp4", fps=24)
+        
+        st.write(f"🎨 Creating '{vibe}' Thumbnail...")
+        get_thumbnail(topic, mode, vibe, "thumb.jpg")
+        add_text_on_image("thumb.jpg", topic, vibe)
+        
+        st.write("🎬 Editing Final Cut...")
+        edit_video("bg.mp4", "audio.mp3", script, "final.mp4", mode, vibe)
+        
+    st.success("Production Complete!")
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        st.image("thumb.jpg", caption="Thumbnail")
+        with open("thumb.jpg", "rb") as f:
+            st.download_button("⬇️ Download Thumb", f, "thumb.jpg")
+    with c2:
+        st.video("final.mp4")
+        with open("final.mp4", "rb") as f:
+            st.download_button("⬇️ Download Video", f, "video.mp4")
